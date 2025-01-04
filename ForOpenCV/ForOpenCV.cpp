@@ -1,147 +1,84 @@
-﻿#include "CameraCalibration.h"
+﻿#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <iostream>
+#include <stdio.h>
 
-void ZhangIt() {
-    CameraCalibration cc;
-    cv::Size checkerboardSize(6, 6); 
-    double cellSize = 0.1;
+#include "cloudFromImages.h"
 
-    std::vector<cv::Point3f> worldPoints;
-    for (int i = 0; i < checkerboardSize.height; ++i)
-        for (int j = 0; j < checkerboardSize.width; ++j)
-            worldPoints.emplace_back(j * cellSize, i * cellSize, 0.0);
 
-    std::vector<cv::Mat> H_list;
-    for (int i = 1; i <= 22; ++i) {
-        //std::string imagePath = "T:/files/calib_images/imgs/rightcamera/Im_R_" + std::to_string(i) + ".png";
-        std::string imagePath = "T:/files/calib_images/imgs/cameracamera/" + std::to_string(i) + ".jpg";
-        cv::Mat image = cv::imread(imagePath);
-        //cv::imshow("bruh", image);
-        //cv::waitKey(0);
-        std::vector<cv::Point2f> corners;
-
-        corners = cc.get_corners(image, checkerboardSize, true);
-        if (corners.empty()) {
-            std::cerr << "Failed to detect corners in image: " << imagePath << std::endl;
-            continue;
-        }
-        /*
-        for (int a = 6; a < 10; a++) {
-            for (int b = 6; b < 8; b++) {
-                checkerboardSize = cv::Size(a, b);
-                corners = cc.get_corners(image, checkerboardSize);
-                std::cout << a << " " << b << std::endl;
-                if (corners.empty()) {
-                    std::cerr << "Failed to detect corners in image: " << imagePath << std::endl;
-                    continue;
-                }
-            }
-        }*/
-
-        cv::Mat H = cv::findHomography(worldPoints, corners);
-        H_list.push_back(H);
-    }
-    std::cout << H_list.size() << std::endl;
-    
-    cv::Mat K = cc.compute_intrinsics(H_list);
-    cv::Mat H0 = H_list[0];
-    cv::Mat K_inv = K.inv();
-
-    cv::Mat r1r2t = K_inv * H0;
-    cv::Mat r1 = r1r2t.col(0);
-    cv::Mat r2 = r1r2t.col(1);
-    cv::Mat t = r1r2t.col(2);
-    cv::Mat r3 = r1.cross(r2);
-    cv::Mat R; 
-    cv::hconcat(r1, r2, R);
-    cv::hconcat(R, r3, R);
-    R = R.t();
-
-    std::cout << "K:\n" << K << std::endl;
-    std::cout << "R:\n" << R << std::endl;
-    std::cout << "t:\n" << t << std::endl;
-}
-
-void Objection() {
-    std::string imagePath = "T:/files/calib_images/imgs/Img2.jpg";
-    cv::Mat image = cv::imread(imagePath);
-    CameraCalibration cc;
-    std::vector<cv::Point3f> X; std::vector<cv::Point2f> U;
-    cc.get_XU(image, X, U);
-
-    /*
-    cv::Mat displayImage;
-    image.copyTo(displayImage);
-    for (int i = 0; i < U.size(); i++) {
-        cv::circle(displayImage, U.at(i), 10, cv::Scalar(0, 0, 255), -1);
-    }
-    cv::resize(displayImage, displayImage, cv::Size(390, 520));
-    cv::imshow("Point show", displayImage);
-    cv::waitKey(0);*/
-
-    int num_points = X.size();
-    cv::Mat A = cv::Mat::zeros(num_points * 2, 12, CV_32F);
-
-    float x, y, z, u, v;
-    for (int idx = 0; idx < num_points; idx++) {
-        x = X[idx].x; y = X[idx].y; z = X[idx].z;
-        u = U[idx].x; v = U[idx].y;
-            
-        A.at<float>(2 * idx, 0) = x; A.at<float>(2 * idx, 1) = y;  
-        A.at<float>(2 * idx, 2) = z;  A.at<float>(2 * idx, 3) = 1;
-        A.at<float>(2 * idx, 8) = -u * x; A.at<float>(2 * idx, 9) = -u * y; 
-        A.at<float>(2 * idx, 10) = -u * z; A.at<float>(2 * idx, 11) = -u;
-
-        A.at<float>(2 * idx + 1, 4) = x; A.at<float>(2 * idx + 1, 5) = y; 
-        A.at<float>(2 * idx + 1, 6) = z; A.at<float>(2 * idx + 1, 7) = 1;
-        A.at<float>(2 * idx + 1, 8) = -v * x; A.at<float>(2 * idx + 1, 9) = -v * y; 
-        A.at<float>(2 * idx + 1, 10) = -v * z; A.at<float>(2 * idx + 1, 11) = -v;
-    }
-    cv::Mat eigenvalues, eigenvectors;
-    eigen(A.t() * A, eigenvalues, eigenvectors);
-    cv::Mat P = eigenvectors.row(eigenvectors.rows - 1).reshape(1, 3);
-    P = P * 1 / P.at<float>(2, 3);
-
-    cv::Mat X_homogeneous(X.size(), 4, CV_32F);
-    for (size_t i = 0; i < X.size(); ++i) {
-        X_homogeneous.at<float>(i, 0) = X[i].x;
-        X_homogeneous.at<float>(i, 1) = X[i].y;
-        X_homogeneous.at<float>(i, 2) = X[i].z;
-        X_homogeneous.at<float>(i, 3) = 1.0;
-    }
-
-    P.convertTo(P, CV_32F);
-    X_homogeneous.convertTo(X_homogeneous, CV_32F);
-    cv::Mat U_projected_homogeneous = P*X_homogeneous.t();
-    U_projected_homogeneous = U_projected_homogeneous.t();
-
-    float error = 0.0, u_proj, v_proj;
-    for (int i = 0; i < U_projected_homogeneous.rows; ++i) {
-        u_proj = U_projected_homogeneous.at<float>(i, 0) / U_projected_homogeneous.at<float>(i, 2);
-        v_proj = U_projected_homogeneous.at<float>(i, 1) / U_projected_homogeneous.at<float>(i, 2);
-        u = U[i].x;
-        v = U[i].y;
-        error += sqrt(pow(u - u_proj, 2) + pow(v - v_proj, 2));
-    }
-    error /= U.size();
-
-    std::cout << "Reprojection error: " << error << std::endl;
-
-    cv::Mat K, R, t;
-    cv::Mat M = P(cv::Range(0, 3), cv::Range(0, 3));
-    RQDecomp3x3(M, K, R);
-    K *= -1; R *= -1; K.col(0) *= -1; R.row(0) *= -1;
-    t = K.inv() * P.col(3);
-    cv::Mat P_reconstructed;
-    hconcat(K * R, K * t, P_reconstructed);
-
-    std::cout << "K:\n" << K << std::endl;
-    std::cout << "R:\n" << R << std::endl;
-    std::cout << "t:\n" << t << std::endl;
-}
-
-int main()
+int main(int argc, char** argv)
 {
-    Objection();
-    ZhangIt();
+    CloudFromImages cfi;
+    cv::Mat K, R, t, dist,
+            K2, R2, t2, dist2;
+    /*
+    std::vector<cv::Mat> chessboards;
+    std::vector<cv::Mat> chessboards2;
+    chessboards = cfi.imagesFromFolder("T:\\task3\\footage\\Dev0_some_chessboard\\*.jpg");
+    chessboards2 = cfi.imagesFromFolder("T:\\task3\\footage\\Dev1_some_chessboard\\*.jpg");
+    cfi.calibrateZhang(chessboards, K, R, t, dist);
+    cfi.calibrateZhang(chessboards2, K2, R2, t2, dist2);
+    cfi.saveCameraParameters("T:\\task3\\KRt.txt", K, R, t, dist); 
+    cfi.saveCameraParameters("T:\\task3\\KRt_Dev1.txt", K2, R2, t2, dist2); 
+    */
+    cfi.downloadCameraParameters("T:\\task3\\KRt.txt", K, R, t, dist);
+    cfi.downloadCameraParameters("T:\\task3\\KRt_Dev1.txt", K2, R2, t2, dist2);
+    /*
+    std::vector<cv::Mat> images = cfi.imagesFromFolder("T:\\task3\\footage\\Dev0_some_footage\\*.jpg");
+    std::vector<cv::Mat> images2 = cfi.imagesFromFolder("T:\\task3\\footage\\Dev1_some_footage\\*.jpg");
+
+    images = cfi.undistortAll(images, K, dist);
+    images2 = cfi.undistortAll(images2, K2, dist2);
+    int minSize = images.size() > images2.size() ? images2.size() : images.size();
+    for (int i = 0; i < minSize; i += 1) {
+        cv::imwrite("T:\\task3\\undistortsDiv0\\" + std::to_string(i) + ".jpg", images[i]);
+        cv::imwrite("T:\\task3\\undistortsDiv1\\" + std::to_string(i) + ".jpg", images2[i]);
+    }
+    return 0;*/
+    // DIV 1 is left DIV 0 is right !!!
+    std::vector<cv::Mat> images = cfi.imagesFromFolder("T:\\task3\\undistortsDiv0\\*.jpg"),
+                         images2 = cfi.imagesFromFolder("T:\\task3\\undistortsDiv1\\*.jpg");
+    int minSize = images.size() > images2.size() ? images2.size() : images.size();
+    std::vector<cv::Mat> imagesRectifiedLeft = cfi.imagesFromFolder("T:\\task3\\rectifiedLeft\\*.jpg"),
+                         imagesRectifiedRight = cfi.imagesFromFolder("T:\\task3\\rectifiedRight\\*.jpg");
+
+    //std::vector<cv::Point3f> pointsTotal;
+    double baselineLength = 0.1f;
+    for (int i = 0; i < minSize; i+=1){ 
+        /*
+        cv::Mat matchImage; 
+        cv::Mat leftImage = images2[i], rightImage = images[i];
+        std::vector<cv::Point2f> ps1, ps2;
+        cfi.detectAndMatchFeatures(leftImage, rightImage, ps1, ps2, matchImage);
+        cv::imwrite("T:\\task3\\matched\\match" + std::to_string(i) + ".jpg", matchImage);
+
+        cv::Mat img1Rect, img2Rect; 
+        cfi.rectifyPair(leftImage, rightImage, ps1, ps2, K2, dist2, K, dist, img1Rect, img2Rect, baselineLength);
+        cv::imwrite("T:\\task3\\rectifiedLeft\\" + std::to_string(i) + ".jpg", img1Rect);
+        cv::imwrite("T:\\task3\\rectifiedRight\\" + std::to_string(i) + ".jpg", img2Rect);*/
+        // we output left to img1Rect and right to img2Rect hence the switch
+        // i just decided to use two cameras later on because i didnt like the results
+        std::cout << i << std::endl;
+        cv::Mat img1Rect = imagesRectifiedLeft[i];
+        cv::Mat img2Rect = imagesRectifiedRight[i];
+        cv::Mat disparityMap = cfi.calculateDisparityMap(img2Rect, img1Rect);
+        short mn = *std::min_element(disparityMap.begin<short>(), disparityMap.end<short>());
+        short mx = *std::max_element(disparityMap.begin<short>(), disparityMap.end<short>());
+        cv::Mat disparityMapPositive;
+        cv::normalize(disparityMap, disparityMapPositive, 0, mx - mn, cv::NORM_MINMAX, CV_16U);
+        cv::Mat disparityMapNormalized;
+        cv::normalize(disparityMap, disparityMapNormalized, 0, 255, cv::NORM_MINMAX, CV_8U);
+        cv::imwrite("T:\\task3\\disparities\\disparityMap" + std::to_string(i) + ".jpg", disparityMapNormalized);
+        cv::imwrite("T:\\task3\\disparityLeftMatch\\disparityBaseLeft" + std::to_string(i) + ".jpg", img1Rect);
+        cv::imwrite("T:\\task3\\disparityRightMatch\\disparityBaseRight" + std::to_string(i) + ".jpg", img2Rect);
+
+
+        std::vector<cv::Point3f> points; 
+        std::vector<cv::Vec3b> colors;
+        cfi.triangulatePoints(img1Rect, disparityMapPositive, K2, baselineLength, points, colors);
+        //pointsTotal.insert(pointsTotal.end(), points.begin(), points.end());
+        cfi.saveToPLY("T:\\task3\\Scene3D" + std::to_string(i) + std::to_string(i+1) + ".ply", points, colors);
+        /**/
+    }
     return 0;
 }

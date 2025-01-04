@@ -132,11 +132,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="CameraCalibration.cpp" />
+    <ClCompile Include="CloudFromImages.cpp" />
     <ClCompile Include="ForOpenCV.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CameraCalibration.h" />
+    <ClInclude Include="CloudFromImages.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

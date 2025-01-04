@@ -18,12 +18,12 @@
     <ClCompile Include="ForOpenCV.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="CameraCalibration.cpp">
+    <ClCompile Include="CloudFromImages.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CameraCalibration.h">
+    <ClInclude Include="CloudFromImages.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
